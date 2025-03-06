@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Aisume</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    input, button {
+      margin: 5px 0;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Aisume</h2>
+    <div>
+      <label for="resume">Upload Resume (PDF):</label>
+      <input type="file" id="resume" accept=".pdf">
+    </div>
+    <div>
+      <label for="apiKey">OpenAI API Key:</label>
+      <input type="password" id="apiKey" placeholder="Enter your OpenAI API key">
+    </div>
+    <button id="saveSettings">Save Settings</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 
