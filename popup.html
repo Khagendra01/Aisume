@@ -2,35 +2,41 @@
 <html>
 <head>
   <title>Aisume</title>
-  <style>
-    body {
-      width: 300px;
-      padding: 15px;
-    }
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-    input, button {
-      margin: 5px 0;
-      padding: 8px;
-    }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
-    <h2>Aisume</h2>
-    <div>
-      <label for="resume">Upload Resume (PDF):</label>
-      <input type="file" id="resume" accept=".pdf">
-    </div>
-    <div>
+    <h1>Aisume</h1>
+    <p>Tailor your resume and cover letter for job applications</p>
+    
+    <div class="form-group">
       <label for="apiKey">OpenAI API Key:</label>
       <input type="password" id="apiKey" placeholder="Enter your OpenAI API key">
+      <small>Your API key is stored locally only</small>
     </div>
-    <button id="saveSettings">Save Settings</button>
+    
+    <div class="form-group">
+      <label for="resumeFile">Upload Resume (PDF/DOCX):</label>
+      <input type="file" id="resumeFile" accept=".pdf,.docx">
+      <small id="resumeStatus"></small>
+    </div>
+    
+    <div class="actions">
+      <button id="saveSettings">Save Settings</button>
+    </div>
+    
+    <div class="status-message" id="statusMessage"></div>
+    
+    <div class="instructions">
+      <h3>How to use:</h3>
+      <ol>
+        <li>Enter your OpenAI API key</li>
+        <li>Upload your resume</li>
+        <li>Navigate to a job posting page</li>
+        <li>Use the "Generate Resume" or "Generate Cover Letter" buttons that appear on the page</li>
+      </ol>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>
-</html> 
+</html>

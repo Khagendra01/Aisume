@@ -1,42 +1,131 @@
-// Add buttons to the page
-function addButtons() {
-  const buttonContainer = document.createElement('div');
-  buttonContainer.style.position = 'fixed';
-  buttonContainer.style.bottom = '20px';
-  buttonContainer.style.right = '20px';
-  buttonContainer.style.zIndex = '9999';
-
-  const generateResumeBtn = document.createElement('button');
-  generateResumeBtn.textContent = 'Generate Resume';
-  generateResumeBtn.style.marginRight = '10px';
-  generateResumeBtn.addEventListener('click', () => generateDocument('resume'));
-
-  const generateCoverLetterBtn = document.createElement('button');
-  generateCoverLetterBtn.textContent = 'Generate Cover Letter';
-  generateCoverLetterBtn.addEventListener('click', () => generateDocument('coverLetter'));
-
-  buttonContainer.appendChild(generateResumeBtn);
-  buttonContainer.appendChild(generateCoverLetterBtn);
-  document.body.appendChild(buttonContainer);
+// Create and inject UI elements
+function injectAisumeButtons() {
+  // Create container
+  const container = document.createElement('div');
+  container.className = 'aisume-container';
+  
+  // Create resume button
+  const resumeButton = document.createElement('button');
+  resumeButton.className = 'aisume-button';
+  resumeButton.id = 'aisume-resume-button';
+  resumeButton.innerHTML = '<span>Generate Resume</span>';
+  
+  // Create cover letter button
+  const coverLetterButton = document.createElement('button');
+  coverLetterButton.className = 'aisume-button';
+  coverLetterButton.id = 'aisume-cover-letter-button';
+  coverLetterButton.innerHTML = '<span>Generate Cover Letter</span>';
+  
+  // Create output container
+  const outputContainer = document.createElement('div');
+  outputContainer.className = 'aisume-output-container';
+  outputContainer.id = 'aisume-output';
+  outputContainer.style.display = 'none';
+  
+  // Add buttons to container
+  container.appendChild(resumeButton);
+  container.appendChild(coverLetterButton);
+  container.appendChild(outputContainer);
+  
+  // Add container to body
+  document.body.appendChild(container);
+  
+  // Add event listeners
+  resumeButton.addEventListener('click', () => generateDocument('resume'));
+  coverLetterButton.addEventListener('click', () => generateDocument('coverLetter'));
 }
 
+// Function to scrape job description
+function scrapeJobDescription() {
+  // Get all visible text from the body
+  const bodyText = document.body.innerText;
+  
+  // Basic text cleaning
+  const cleanText = bodyText
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 5000); // Limit to 5000 chars to avoid token limits
+    
+  return cleanText;
+}
+
+// Function to generate document
 async function generateDocument(type) {
-  // Get the job description from the page
-  const jobDescription = document.body.innerText;
-
-  // Get stored API key and resume
-  const { apiKey, resume } = await chrome.storage.local.get(['apiKey', 'resume']);
-
-  if (!apiKey) {
-    alert('Please set your OpenAI API key in the extension popup');
-    return;
+  const outputElement = document.getElementById('aisume-output');
+  outputElement.style.display = 'block';
+  outputElement.innerHTML = '<div class="aisume-loading">Processing...</div>';
+  
+  try {
+    // Get settings from storage
+    const settings = await new Promise(resolve => {
+      chrome.storage.local.get(['openaiApiKey', 'resume'], (result) => {
+        resolve(result);
+      });
+    });
+    
+    if (!settings.openaiApiKey) {
+      showError('OpenAI API key not found. Please add it in the extension popup.');
+      return;
+    }
+    
+    if (!settings.resume) {
+      showError('Resume not found. Please upload it in the extension popup.');
+      return;
+    }
+    
+    // Get job description
+    const jobDescription = scrapeJobDescription();
+    
+    if (!jobDescription) {
+      showError('Could not extract job description from this page.');
+      return;
+    }
+    
+    // Prepare prompt based on document type
+    const prompt = type === 'resume' 
+      ? `Generate a tailored resume based on my existing resume and this job description. Focus on relevant skills and experiences.`
+      : `Generate a tailored cover letter based on my resume and this job description. Make it professional and highlight my relevant qualifications.`;
+    
+    // Get resume text (normally we'd parse, but using placeholder here)
+    const resumeText = settings.resume.data;
+    
+    // Call OpenAI API
+    const response = await callOpenAI(settings.openaiApiKey, prompt, jobDescription, resumeText);
+    
+    // Display the result
+    outputElement.innerHTML = `
+      <div class="aisume-result">
+        <h3>Your Tailored ${type === 'resume' ? 'Resume' : 'Cover Letter'}</h3>
+        <div class="aisume-content">${formatOutput(response)}</div>
+        <div class="aisume-actions">
+          <button id="aisume-copy">Copy to Clipboard</button>
+          <button id="aisume-download">Download as Text</button>
+          <button id="aisume-close">Close</button>
+        </div>
+      </div>
+    `;
+    
+    // Add event listeners for actions
+    document.getElementById('aisume-copy').addEventListener('click', () => {
+      navigator.clipboard.writeText(response);
+      alert('Copied to clipboard!');
+    });
+    
+    document.getElementById('aisume-download').addEventListener('click', () => {
+      downloadText(response, `Tailored_${type === 'resume' ? 'Resume' : 'Cover_Letter'}.txt`);
+    });
+    
+    document.getElementById('aisume-close').addEventListener('click', () => {
+      outputElement.style.display = 'none';
+    });
+    
+  } catch (error) {
+    showError(`Error: ${error.message}`);
   }
+}
 
-  if (!resume) {
-    alert('Please upload your resume in the extension popup');
-    return;
-  }
-
+// Function to call OpenAI API
+async function callOpenAI(apiKey, prompt, jobDescription, resumeText) {
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -45,50 +134,73 @@ async function generateDocument(type) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: 'gpt-4o', // or another appropriate model
         messages: [
           {
-            role: "system",
-            content: `You are a professional resume and cover letter writer. Use the provided resume and job description to create a tailored ${type}.`
+            role: 'system',
+            content: 'You are an AI assistant that tailors resumes and cover letters based on job descriptions.'
           },
           {
-            role: "user",
-            content: `Resume: ${resume}\n\nJob Description: ${jobDescription}\n\nPlease generate a tailored ${type}.`
+            role: 'user',
+            content: `
+              ${prompt}
+              
+              Job Description:
+              ${jobDescription}
+              
+              My Resume:
+              ${resumeText}
+            `
           }
-        ]
+        ],
+        max_tokens: 2000,
+        temperature: 0.7
       })
     });
-
+    
     const data = await response.json();
     
-    // Create a popup with the generated content
-    const popup = document.createElement('div');
-    popup.style.position = 'fixed';
-    popup.style.top = '50%';
-    popup.style.left = '50%';
-    popup.style.transform = 'translate(-50%, -50%)';
-    popup.style.backgroundColor = 'white';
-    popup.style.padding = '20px';
-    popup.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
-    popup.style.maxHeight = '80vh';
-    popup.style.overflow = 'auto';
-    popup.style.zIndex = '10000';
-
-    const content = document.createElement('pre');
-    content.textContent = data.choices[0].message.content;
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
     
-    const closeButton = document.createElement('button');
-    closeButton.textContent = 'Close';
-    closeButton.onclick = () => popup.remove();
-
-    popup.appendChild(content);
-    popup.appendChild(closeButton);
-    document.body.appendChild(popup);
-
+    return data.choices[0].message.content;
   } catch (error) {
-    alert('Error generating document: ' + error.message);
+    console.error('OpenAI API Error:', error);
+    throw error;
   }
 }
 
-// Add buttons when the page loads
-addButtons(); 
+// Format output with line breaks
+function formatOutput(text) {
+  return text.replace(/\n/g, '<br>');
+}
+
+// Download text as file
+function downloadText(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Show error message
+function showError(message) {
+  const outputElement = document.getElementById('aisume-output');
+  outputElement.innerHTML = `
+    <div class="aisume-error">
+      <p>${message}</p>
+      <button id="aisume-close-error">Close</button>
+    </div>
+  `;
+  
+  document.getElementById('aisume-close-error').addEventListener('click', () => {
+    outputElement.style.display = 'none';
+  });
+}
+
+// Initialize on page load
+window.addEventListener('load', injectAisumeButtons);

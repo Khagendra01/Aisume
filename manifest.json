@@ -1,20 +1,21 @@
 {
-  "manifest_version": 3,
-  "name": "Aisume",
-  "version": "1.0",
-  "description": "AI-powered resume and cover letter generator",
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting"
-  ],
-  "action": {
-    "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"]
-    }
-  ]
-} 
+    "manifest_version": 3,
+    "name": "Aisume",
+    "version": "1.1",
+    "description": "Generate tailored resumes and cover letters using OpenAI API",
+    "permissions": [
+      "storage",
+      "activeTab",
+      "scripting"
+    ],
+    "action": {
+      "default_popup": "popup.html"
+    },
+    "content_scripts": [
+      {
+        "matches": ["<all_urls>"],
+        "js": ["content.js"],
+        "css": ["content.css"]
+      }
+    ]
+  }
