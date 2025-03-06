@@ -35,18 +35,53 @@ function injectAisumeButtons() {
   coverLetterButton.addEventListener('click', () => generateDocument('coverLetter'));
 }
 
-// Function to scrape job description
-function scrapeJobDescription() {
-  // Get all visible text from the body
-  const bodyText = document.body.innerText;
+// Function to extract just the job title and description
+function extractJobInfo() {
+  // Try to find job title
+  let jobTitle = '';
+  const possibleTitleElements = document.querySelectorAll('h1, h2, .job-title, [class*="title"], [class*="position"]');
+  for (const element of possibleTitleElements) {
+    const text = element.innerText.trim();
+    if (text && text.length < 100) {
+      jobTitle = text;
+      break;
+    }
+  }
   
-  // Basic text cleaning
-  const cleanText = bodyText
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 5000); // Limit to 5000 chars to avoid token limits
-    
-  return cleanText;
+  // Get main content - prioritize job description sections
+  const jobDescriptionSelectors = [
+    '.job-description',
+    '#job-description',
+    '[class*="description"]',
+    '[class*="details"]',
+    'article',
+    'main',
+    '.main-content'
+  ];
+  
+  let jobDescription = '';
+  for (const selector of jobDescriptionSelectors) {
+    const elements = document.querySelectorAll(selector);
+    for (const element of elements) {
+      const text = element.innerText.trim();
+      if (text && text.length > 200 && text.length < 3000) {
+        jobDescription = text;
+        break;
+      }
+    }
+    if (jobDescription) break;
+  }
+  
+  // If still no description, use a smaller portion of the page content
+  if (!jobDescription) {
+    const bodyText = document.body.innerText;
+    jobDescription = bodyText.slice(0, 2000);
+  }
+  
+  return {
+    title: jobTitle,
+    description: jobDescription.slice(0, 3000) // Limit to 3000 chars to avoid token limits
+  };
 }
 
 // Function to generate document
@@ -73,24 +108,24 @@ async function generateDocument(type) {
       return;
     }
     
-    // Get job description
-    const jobDescription = scrapeJobDescription();
+    // Get job information
+    const jobInfo = extractJobInfo();
     
-    if (!jobDescription) {
+    if (!jobInfo.description) {
       showError('Could not extract job description from this page.');
       return;
     }
     
-    // Prepare prompt based on document type
-    const prompt = type === 'resume' 
-      ? `Generate a tailored resume based on my existing resume and this job description. Focus on relevant skills and experiences.`
-      : `Generate a tailored cover letter based on my resume and this job description. Make it professional and highlight my relevant qualifications.`;
+    // Extract key resume information instead of using the full resume
+    const resumeData = settings.resume.data;
     
-    // Get resume text (normally we'd parse, but using placeholder here)
-    const resumeText = settings.resume.data;
-    
-    // Call OpenAI API
-    const response = await callOpenAI(settings.openaiApiKey, prompt, jobDescription, resumeText);
+    // Call OpenAI API with optimized content
+    const response = await callOpenAIWithTokenOptimization(
+      settings.openaiApiKey, 
+      type, 
+      jobInfo, 
+      resumeData
+    );
     
     // Display the result
     outputElement.innerHTML = `
@@ -124,9 +159,31 @@ async function generateDocument(type) {
   }
 }
 
-// Function to call OpenAI API
-async function callOpenAI(apiKey, prompt, jobDescription, resumeText) {
+// Optimize for token usage to avoid OpenAI limits
+async function callOpenAIWithTokenOptimization(apiKey, type, jobInfo, resumeData) {
   try {
+    // Create a summarized version of the resume data to reduce tokens
+    const resumeSummary = extractResumeInfo(resumeData);
+    
+    // Prepare optimized prompt based on document type
+    const systemPrompt = type === 'resume' 
+      ? `You are an expert resume tailor. Create a concise, targeted resume based on the provided resume information and job description. Focus on relevant skills and experiences only.`
+      : `You are an expert cover letter writer. Create a professional, tailored cover letter that highlights relevant qualifications from the resume for the specific job posting.`;
+    
+    const userPrompt = `
+      Job Title: ${jobInfo.title}
+      
+      Job Description: 
+      ${jobInfo.description}
+      
+      My Resume Information:
+      ${resumeSummary}
+      
+      Please create a tailored ${type === 'resume' ? 'resume' : 'cover letter'} for this job posting.
+      ${type === 'resume' ? 'Include only relevant sections and skills.' : 'Keep it to one page and professional in tone.'}
+    `;
+    
+    // Call OpenAI with a more efficient model and token settings
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -134,26 +191,18 @@ async function callOpenAI(apiKey, prompt, jobDescription, resumeText) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // or another appropriate model
+        model: 'gpt-3.5-turbo', // Using 3.5 which has higher token limits and is more cost-effective
         messages: [
           {
             role: 'system',
-            content: 'You are an AI assistant that tailors resumes and cover letters based on job descriptions.'
+            content: systemPrompt
           },
           {
             role: 'user',
-            content: `
-              ${prompt}
-              
-              Job Description:
-              ${jobDescription}
-              
-              My Resume:
-              ${resumeText}
-            `
+            content: userPrompt
           }
         ],
-        max_tokens: 2000,
+        max_tokens: 1500,
         temperature: 0.7
       })
     });
@@ -169,6 +218,21 @@ async function callOpenAI(apiKey, prompt, jobDescription, resumeText) {
     console.error('OpenAI API Error:', error);
     throw error;
   }
+}
+
+// Extract key information from resume to reduce tokens
+function extractResumeInfo(resumeData) {
+  // In a real implementation, this would parse the resume
+  // For now, we'll just create a placeholder for the concept
+  
+  // Simplified resume data would extract:
+  // - Name & Contact
+  // - Skills list
+  // - Recent job titles, companies, and dates
+  // - Education highlights
+  
+  // Limiting to 1000 characters total
+  return resumeData.length > 1000 ? resumeData.slice(0, 1000) + "..." : resumeData;
 }
 
 // Format output with line breaks
